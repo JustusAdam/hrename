@@ -24,7 +24,10 @@ Run `hrename [options]`
       -w, --workingDir :: text
         Directory who's content is to be renamed
         default: "."
-      -r, --regex :: maybe<text>
+      -e, --regex :: maybe<text>
         Regex to use for conversion (required)
       -f, --format :: maybe<text>
         Format string for conversion target (required)
+      -r, --recursive :: bool
+        Scan subdirectories recursively, applying the renaming (untested)
+        default: false

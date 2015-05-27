@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import           Data.Text.ICU      (regex', Regex, unfold, group, find, )
+import           Data.Text.ICU      (regex, Regex, unfold, group, find, )
 import           System.Directory   (doesFileExist, doesDirectoryExist,
                                     renameFile, getDirectoryContents)
 import           System.FilePath    ((</>))
@@ -83,10 +83,11 @@ renameOne r out = maybe (return ()) <$> renameFile <*> fmap unpack . translateOn
 
 
 regexSuccess :: Bool -> Regex -> Format -> FilePath -> IO ()
-regexSuccess isRecusive r f d =
-  allRealFiles >>=
-    mapM_ (renameOne r f) >>
-      bool (return ()) doItAgain isRecusive
+regexSuccess isRecusive r f d = do
+  allRealFiles >>= mapM_ (renameOne r f)
+  if isRecusive
+    then doItAgain
+    else return ()
   where
     files = fmap (map (d </>)) (getDirectoryContents d)
 
@@ -105,13 +106,19 @@ main' opts args =
       maybe
         (TIO.putStrLn noFormatMessage)
         (\rawFormat ->
-          (doesDirectoryExist (workingDir opts) >>=
-            bool
-              (TIO.putStrLn (invalidDir (workingDir opts)))
-              (either
-                (putStrLn . ("unusable Regex " ++) . show)
-                (\r -> regexSuccess (scanRecursive opts) r (fromString rawFormat) (workingDir opts))
-                (regex' [] $ T.pack rawRegex))))
+          doesDirectoryExist (workingDir opts) >>=
+          (\dirExists ->
+            if dirExists
+              then
+                let
+                  isRecursive      = scanRecursive opts
+                  compiledRegex    = regex [] $ T.pack rawRegex
+                  formatString     = fromString rawFormat
+                  workingDirectory = workingDir opts
+                in
+                regexSuccess isRecursive compiledRegex formatString workingDirectory
+            else
+              TIO.putStrLn (invalidDir (workingDir opts))))
         (outputFormat opts))
     (chosenRegex opts)
 

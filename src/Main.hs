@@ -54,7 +54,7 @@ instance Options CallArgs where
           (optionType_maybe optionType_string)
           (\o -> o {
             optionLongFlags   = ["regex"],
-            optionShortFlags  = "r",
+            optionShortFlags  = "e",
             optionDescription = "Regex to use for conversion (required)"
           })
     <*> defineOption
@@ -65,7 +65,7 @@ instance Options CallArgs where
             optionDescription = "Format string for conversion target (required)"
           })
     <*> defineOption
-          (optionType_bool)
+          optionType_bool
           (\o -> o {
             optionShortFlags  = "r",
             optionLongFlags   = ["recursive"],
@@ -82,25 +82,28 @@ renameOne r out = maybe (return ()) <$> renameFile <*> fmap unpack . translateOn
 
 
 regexSuccess :: Bool -> Regex -> Format -> FilePath -> IO ()
-regexSuccess rec r f d =
-   files >>=
-    filterM doesFileExist >>=
-      mapM_ (renameOne r f) >> bool (return ()) doItAgain rec
+regexSuccess isRecusive r f d =
+  allRealFiles >>=
+    mapM_ (renameOne r f) >>
+      bool (return ()) doItAgain isRecusive
   where
     files = fmap (map (d </>)) (getDirectoryContents d)
 
+    allRealFiles = files >>= filterM doesFileExist
+    allRealDirs  = files >>= filterM doesDirectoryExist
+
     doItAgain :: IO ()
-    doItAgain = files >>= filterM doesDirectoryExist >>= mapM_ (regexSuccess True r f)
+    doItAgain = allRealDirs >>= mapM_ (regexSuccess True r f)
 
 
 main' :: CallArgs -> [String] -> IO()
-main' opts args = do
+main' opts args =
   maybe
     (TIO.putStrLn noRegexMessage)
     (\rawRegex ->
       maybe
         (TIO.putStrLn noFormatMessage)
-        (\rawFormat -> do
+        (\rawFormat ->
           (doesDirectoryExist (workingDir opts) >>=
             bool
               (TIO.putStrLn (invalidDir (workingDir opts)))

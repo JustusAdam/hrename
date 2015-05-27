@@ -4,7 +4,8 @@
 name:                hrename
 version:             0.1.0.0
 synopsis:            Bulk rename files
--- description:
+description:         Package for renaming all files inside a directory with or
+                     without also renaming files in subdirectories.
 license:             MIT
 license-file:        LICENSE
 author:              Justus Adam

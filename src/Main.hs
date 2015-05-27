@@ -4,10 +4,12 @@ module Main (main) where
 
 import           Data.Text.ICU      (regex, Regex, unfold, group, find, )
 import           System.Directory   (doesFileExist, doesDirectoryExist,
-                                    renameFile, getDirectoryContents)
+                                    renameFile, getDirectoryContents,
+                                    renameDirectory)
 import           System.FilePath    ((</>))
 import           Control.Monad      (filterM)
 import           Data.Text.Format   (Format, format)
+import           Data.Bool          (bool)
 import           Data.Text.Lazy     as Lazy.Text (Text, toStrict, unpack, pack)
 import           Options            (Options, defineOption, optionLongFlags,
                                     optionShortFlags,  optionType_string,
@@ -31,10 +33,12 @@ invalidDir      :: FilePath -> T.Text
 invalidDir p    = "Directory '" `T.append` T.pack p `T.append` "' does not exist"
 
 
-data CallArgs = CallArgs { workingDir    :: FilePath
-                         , chosenRegex   :: Maybe String
-                         , outputFormat  :: Maybe String
-                         , scanRecursive :: Bool
+data CallArgs = CallArgs { workingDir         :: FilePath
+                         , chosenRegex        :: Maybe String
+                         , outputFormat       :: Maybe String
+                         , scanRecursive      :: Bool
+                         , excludeFiles       :: Bool
+                         , excludeDirs        :: Bool
                          }
 
 
@@ -71,29 +75,61 @@ instance Options CallArgs where
             optionLongFlags   = ["recursive", "scan-recursive"],
             optionDescription = "Scan subdirectories recursively, applying the renaming (untested)"
           })
+    <*> defineOption
+          optionType_bool
+          (\o -> o {
+            optionLongFlags   = ["exclude-files"],
+            optionShortFlags  = "x",
+            optionDescription = "Do not rename files"
+          })
+    <*> defineOption
+          optionType_bool
+          (\o -> o {
+            optionLongFlags   = ["exclude-dirs"],
+            optionShortFlags  = "n",
+            optionDescription = "Do not rename directories"
+          })
+
 
 
 translateOne :: Regex -> Format -> Text -> Maybe Text
 translateOne r out = fmap (format out . tail . unfold group) . find r . toStrict
 
 
-renameOne :: Regex -> Format -> FilePath -> IO ()
-renameOne r out = maybe (return ()) <$> renameFile <*> fmap unpack . translateOne r out . pack
+renameOne :: Bool -> Bool -> Regex -> Format -> FilePath -> IO ()
+renameOne doFiles doDirs r out =
+  maybe (return ()) <$> rename <*> fmap unpack . translateOne r out . pack
+  where
+    rename s t =
+      tryFile s t >>=
+      bool
+        (tryDir s t >> return ())
+        (return ())
+
+    try :: Monad m => Bool -> (b -> m Bool) -> (b -> c -> m a) -> b -> c -> m Bool
+    try dec finder action s t =
+      bool
+        (return False)
+        (finder s >>= bool (return False) (action s t >> return True))
+        dec
+
+    tryFile = try doFiles doesFileExist renameFile
+    tryDir = try doDirs doesDirectoryExist renameDirectory
 
 
-regexSuccess :: Bool -> Regex -> Format -> FilePath -> IO ()
-regexSuccess isRecusive r f d = do
-  allRealFiles >>= mapM_ (renameOne r f)
+regexSuccess :: Bool -> Bool -> Bool -> Regex -> Format -> FilePath -> IO ()
+regexSuccess doFiles doDirs isRecusive r f d =
   if isRecusive
     then doItAgain
     else return ()
+  >>
+  files >>= mapM_ (renameOne doFiles doDirs r f)
   where
     files        = fmap (map (d </>)) (getDirectoryContents d)
-    allRealFiles = files >>= filterM doesFileExist
     allRealDirs  = files >>= filterM doesDirectoryExist
 
     doItAgain    :: IO ()
-    doItAgain    = allRealDirs >>= mapM_ (regexSuccess True r f)
+    doItAgain    = allRealDirs >>= mapM_ (regexSuccess doFiles doDirs True r f)
 
 
 main' :: CallArgs -> [String] -> IO()
@@ -113,8 +149,10 @@ main' opts _ =
                   compiledRegex    = regex [] $ T.pack rawRegex
                   formatString     = fromString rawFormat
                   workingDirectory = workingDir opts
+                  doFiles          = not (excludeFiles opts)
+                  doDirs           = not (excludeDirs opts)
                 in
-                  regexSuccess isRecursive compiledRegex formatString workingDirectory
+                  regexSuccess doFiles doDirs isRecursive compiledRegex formatString workingDirectory
               else
                 TIO.putStrLn (invalidDir (workingDir opts))))
         (outputFormat opts))

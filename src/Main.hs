@@ -15,7 +15,7 @@ import           Data.Text.Lazy     as Lazy.Text (Text, toStrict, unpack, pack)
 import           Options            (Options, defineOption, optionLongFlags,
                                     optionShortFlags,  optionType_string,
                                     optionDescription, defineOptions, runCommand,
-                                    optionDefault, optionType_maybe)
+                                    optionDefault, optionType_maybe, optionType_bool)
 import qualified Data.Text          as T (pack, Text, append)
 import qualified Data.Text.IO       as TIO (putStrLn)
 import           Data.String        as String (fromString)
@@ -33,9 +33,10 @@ invalidDir :: FilePath -> T.Text
 invalidDir p = "Directory '" `T.append` T.pack p `T.append` "' does not exist"
 
 
-data CallArgs = CallArgs { workingDir   :: FilePath
-                         , chosenRegex  :: Maybe String
-                         , outputFormat :: Maybe String
+data CallArgs = CallArgs { workingDir    :: FilePath
+                         , chosenRegex   :: Maybe String
+                         , outputFormat  :: Maybe String
+                         , scanRecursive :: Bool
                          }
 
 
@@ -63,14 +64,13 @@ instance Options CallArgs where
             optionShortFlags  = "f",
             optionDescription = "Format string for conversion target (required)"
           })
-
-
-rawR :: Either ParseError Regex
-rawR = regex' [] "^Elementary.S(\\d+)E(\\d+).720p.HDTV.X264-DIMENSION.mkv$"
-
-
-out :: Format
-out = "Season {} Episode {}.mkv"
+    <*> defineOption
+          (optionType_bool)
+          (\o -> o {
+            optionShortFlags  = "r",
+            optionLongFlags   = ["recursive"],
+            optionDescription = "Scan subdirectories recursively, applying the renaming (untested)"
+          })
 
 
 translateOne :: Regex -> Format -> Text -> Maybe Text
@@ -81,11 +81,16 @@ renameOne :: Regex -> Format -> FilePath -> IO ()
 renameOne r out = maybe (return ()) <$> renameFile <*> fmap unpack . translateOne r out . pack
 
 
-regexSuccess :: Regex -> Format -> FilePath -> IO ()
-regexSuccess r f d =
-  fmap (map (d </>)) (getDirectoryContents d) >>=
+regexSuccess :: Bool -> Regex -> Format -> FilePath -> IO ()
+regexSuccess rec r f d =
+   files >>=
     filterM doesFileExist >>=
-      mapM_ (renameOne r f)
+      mapM_ (renameOne r f) >> bool (return ()) doItAgain rec
+  where
+    files = fmap (map (d </>)) (getDirectoryContents d)
+
+    doItAgain :: IO ()
+    doItAgain = files >>= filterM doesDirectoryExist >>= mapM_ (regexSuccess True r f)
 
 
 main' :: CallArgs -> [String] -> IO()
@@ -101,7 +106,7 @@ main' opts args = do
               (TIO.putStrLn (invalidDir (workingDir opts)))
               (either
                 (putStrLn . ("unusable Regex " ++) . show)
-                (\r -> regexSuccess r (uFormat rawFormat) (workingDir opts))
+                (\r -> regexSuccess (scanRecursive opts) r (uFormat rawFormat) (workingDir opts))
                 (regex' [] $ T.pack rawRegex))))
         (outputFormat opts))
     (chosenRegex opts)

@@ -21,13 +21,16 @@ Run `hrename [options]`
         Show all help options.
 
     Application Options:
-      -w, --workingDir :: text
+      -d, --directory :: text
         Directory who's content is to be renamed
         default: "."
       -e, --regex :: maybe<text>
         Regex to use for conversion (required)
+        the regex matcher utilizes the
+        icu standard, a current copy of which can be found here:
+        http://userguide.icu-project.org/strings/regexp
       -f, --format :: maybe<text>
         Format string for conversion target (required)
       -r, --recursive :: bool
         Scan subdirectories recursively, applying the renaming (untested)
-        default: false
+    default: false

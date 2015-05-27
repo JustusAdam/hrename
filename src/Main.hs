@@ -19,16 +19,16 @@ import qualified Data.Text.IO       as TIO (putStrLn)
 import           Data.String        (fromString)
 
 
-noRegexMessage :: T.Text
-noRegexMessage = "You need provide a regex with the '-r' or '--regex' option"
+noRegexMessage  :: T.Text
+noRegexMessage  = "You need provide a regex with the '-e' or '--regex' option"
 
 
 noFormatMessage :: T.Text
 noFormatMessage = "you need provide an output format with the '-f' or '--format' option"
 
 
-invalidDir :: FilePath -> T.Text
-invalidDir p = "Directory '" `T.append` T.pack p `T.append` "' does not exist"
+invalidDir      :: FilePath -> T.Text
+invalidDir p    = "Directory '" `T.append` T.pack p `T.append` "' does not exist"
 
 
 data CallArgs = CallArgs { workingDir    :: FilePath
@@ -43,8 +43,8 @@ instance Options CallArgs where
     <$> defineOption
           optionType_string
           (\o -> o {
-            optionLongFlags   = ["workingDir"],
-            optionShortFlags  = "w",
+            optionLongFlags   = ["directory"],
+            optionShortFlags  = "d",
             optionDescription = "Directory who's content is to be renamed",
             optionDefault     = "."
           })
@@ -53,12 +53,14 @@ instance Options CallArgs where
           (\o -> o {
             optionLongFlags   = ["regex"],
             optionShortFlags  = "e",
-            optionDescription = "Regex to use for conversion (required)"
+            optionDescription = "Regex to use for conversion (required)\n    " ++
+            "the regex matcher utilizes the icu standard, " ++
+            "a current copy of which can be found here: http://userguide.icu-project.org/strings/regexp"
           })
     <*> defineOption
           (optionType_maybe optionType_string)
           (\o -> o {
-            optionLongFlags   = ["format"],
+            optionLongFlags   = ["format", "output-format"],
             optionShortFlags  = "f",
             optionDescription = "Format string for conversion target (required)"
           })
@@ -66,7 +68,7 @@ instance Options CallArgs where
           optionType_bool
           (\o -> o {
             optionShortFlags  = "r",
-            optionLongFlags   = ["recursive"],
+            optionLongFlags   = ["recursive", "scan-recursive"],
             optionDescription = "Scan subdirectories recursively, applying the renaming (untested)"
           })
 
@@ -86,13 +88,12 @@ regexSuccess isRecusive r f d = do
     then doItAgain
     else return ()
   where
-    files = fmap (map (d </>)) (getDirectoryContents d)
-
+    files        = fmap (map (d </>)) (getDirectoryContents d)
     allRealFiles = files >>= filterM doesFileExist
     allRealDirs  = files >>= filterM doesDirectoryExist
 
-    doItAgain :: IO ()
-    doItAgain = allRealDirs >>= mapM_ (regexSuccess True r f)
+    doItAgain    :: IO ()
+    doItAgain    = allRealDirs >>= mapM_ (regexSuccess True r f)
 
 
 main' :: CallArgs -> [String] -> IO()
@@ -113,9 +114,9 @@ main' opts _ =
                   formatString     = fromString rawFormat
                   workingDirectory = workingDir opts
                 in
-                regexSuccess isRecursive compiledRegex formatString workingDirectory
-            else
-              TIO.putStrLn (invalidDir (workingDir opts))))
+                  regexSuccess isRecursive compiledRegex formatString workingDirectory
+              else
+                TIO.putStrLn (invalidDir (workingDir opts))))
         (outputFormat opts))
     (chosenRegex opts)
 

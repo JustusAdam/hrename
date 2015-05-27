@@ -2,23 +2,24 @@
 
 module Main (main) where
 
-import           Data.Text.ICU
-import           System.Environment
-import           System.Directory
+import           Data.Text.ICU      (regex', Regex, unfold, group, find, )
+import           System.Directory   (doesFileExist, doesDirectoryExist,
+                                    renameFile, getDirectoryContents)
 import           System.FilePath    ((</>))
-import           Control.Monad
-import           Data.Text.Format   (Format(..), format)
-import           Data.Bool
+import           Control.Monad      (filterM)
+import           Data.Text.Format   (Format, format)
+import           Data.Bool          (bool)
 import           Data.Traversable   (for)
 import           Data.Maybe         (catMaybes)
 import           Data.Text.Lazy     as Lazy.Text (Text, toStrict, unpack, pack)
 import           Options            (Options, defineOption, optionLongFlags,
                                     optionShortFlags,  optionType_string,
                                     optionDescription, defineOptions, runCommand,
-                                    optionDefault, optionType_maybe, optionType_bool)
+                                    optionDefault, optionType_maybe,
+                                    optionType_bool)
 import qualified Data.Text          as T (pack, Text, append)
 import qualified Data.Text.IO       as TIO (putStrLn)
-import           Data.String        as String (fromString)
+import           Data.String        (fromString)
 
 
 noRegexMessage :: T.Text
@@ -109,13 +110,10 @@ main' opts args =
               (TIO.putStrLn (invalidDir (workingDir opts)))
               (either
                 (putStrLn . ("unusable Regex " ++) . show)
-                (\r -> regexSuccess (scanRecursive opts) r (uFormat rawFormat) (workingDir opts))
+                (\r -> regexSuccess (scanRecursive opts) r (fromString rawFormat) (workingDir opts))
                 (regex' [] $ T.pack rawRegex))))
         (outputFormat opts))
     (chosenRegex opts)
-  where
-    uFormat :: String -> Format
-    uFormat = String.fromString
 
 
 

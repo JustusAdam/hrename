@@ -8,9 +8,6 @@ import           System.Directory   (doesFileExist, doesDirectoryExist,
 import           System.FilePath    ((</>))
 import           Control.Monad      (filterM)
 import           Data.Text.Format   (Format, format)
-import           Data.Bool          (bool)
-import           Data.Traversable   (for)
-import           Data.Maybe         (catMaybes)
 import           Data.Text.Lazy     as Lazy.Text (Text, toStrict, unpack, pack)
 import           Options            (Options, defineOption, optionLongFlags,
                                     optionShortFlags,  optionType_string,
@@ -99,7 +96,7 @@ regexSuccess isRecusive r f d = do
 
 
 main' :: CallArgs -> [String] -> IO()
-main' opts args =
+main' opts _ =
   maybe
     (TIO.putStrLn noRegexMessage)
     (\rawRegex ->

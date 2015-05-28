@@ -59,7 +59,8 @@ instance Options CallArgs where
             optionShortFlags  = "e",
             optionDescription = "Regex to use for conversion (required)\n    " ++
             "the regex matcher utilizes the icu standard, " ++
-            "a current copy of which can be found here: http://userguide.icu-project.org/strings/regexp"
+            "a current copy of which can be found here: " ++
+            "http://userguide.icu-project.org/strings/regexp"
           })
     <*> defineOption
           (optionType_maybe optionType_string)
@@ -119,11 +120,11 @@ renameOne doFiles doDirs r out =
 
 regexSuccess :: Bool -> Bool -> Bool -> Regex -> Format -> FilePath -> IO ()
 regexSuccess doFiles doDirs isRecusive r f d =
+  files >>= mapM_ (renameOne doFiles doDirs r f) >>
+  -- recursive call second to possibly enable tail call optimization
   if isRecusive
     then doItAgain
     else return ()
-  >>
-  files >>= mapM_ (renameOne doFiles doDirs r f)
   where
     files        = fmap (map (d </>)) (getDirectoryContents d)
     allRealDirs  = files >>= filterM doesDirectoryExist
@@ -134,11 +135,14 @@ regexSuccess doFiles doDirs isRecusive r f d =
 
 main' :: CallArgs -> [String] -> IO()
 main' opts _ =
+  -- I haven't been able to find anything better than these nested lambdas
+  -- Too many different Monads at work simultaneously
+  -- also I dislike using case for Maybe's
   maybe
-    (TIO.putStrLn noRegexMessage)
+    (TIO.putStrLn noRegexMessage) -- no regex was provided
     (\rawRegex ->
       maybe
-        (TIO.putStrLn noFormatMessage)
+        (TIO.putStrLn noFormatMessage) -- no format string was provided
         (\rawFormat ->
           doesDirectoryExist (workingDir opts) >>=
           (\dirExists ->
@@ -149,12 +153,20 @@ main' opts _ =
                   compiledRegex    = regex [] $ T.pack rawRegex
                   formatString     = fromString rawFormat
                   workingDirectory = workingDir opts
+                  -- intenally we work with inclusion, thus the inversion
                   doFiles          = not (excludeFiles opts)
                   doDirs           = not (excludeDirs opts)
                 in
-                  regexSuccess doFiles doDirs isRecursive compiledRegex formatString workingDirectory
+                  regexSuccess
+                    doFiles
+                    doDirs
+                    isRecursive
+                    compiledRegex
+                    formatString
+                    workingDirectory
               else
-                TIO.putStrLn (invalidDir (workingDir opts))))
+                -- the choosen directory actually doesn't exist
+                TIO.putStrLn (invalidDir (workingDir opts)))) 
         (outputFormat opts))
     (chosenRegex opts)
 
